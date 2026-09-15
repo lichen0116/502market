@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班級股市交易系統</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            900: '#14532d'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- FontAwesome & Chart.js -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        
+        body {
+            font-family: 'Plus Jakarta Sans', 'Noto Sans TC', sans-serif;
+            background-color: #080c14;
+            background-image: 
+                radial-gradient(at 10% 10%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                radial-gradient(at 90% 90%, rgba(16, 185, 129, 0.12) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .glass-panel-hover {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-panel-hover:hover {
+            transform: translateY(-2px);
+            border-color: rgba(99, 102, 241, 0.35);
+            box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.6), 0 0 20px rgba(99, 102, 241, 0.2);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.6);
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.8);
+        }
+
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+            display: inline-block;
+            white-space: nowrap;
+            animation: marquee 25s linear infinite;
+        }
+        .animate-marquee:hover {
+            animation-play-state: paused;
+        }
+    </style>
+</head>
+
+<body class="text-slate-100 min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white pb-12">
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col space-y-3 pointer-events-none max-w-sm w-full"></div>
+
+    <nav class="bg-slate-900/90 backdrop-blur-xl border-b border-slate-800/80 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- System Title & Logo -->
+                <div class="flex items-center space-x-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                        <i class="fa-solid fa-chart-line text-lg text-white"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="font-black text-lg tracking-wide text-white block leading-none">班級股市交易系統</span>
+                            <span id="syncModeTag" class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold px-2 py-0.5 rounded-full">v3.1 本地體驗版</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400 font-mono tracking-tight">Classroom Stock Exchange Terminal</span>
+                    </div>
+                </div>
+
+                <!-- Status Badge & User Info -->
+                <div class="flex items-center space-x-3">
+                    <div id="marketStatusBadge" class="inline-flex items-center text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 me-2 animate-pulse"></span>
+                        <span id="marketBadgeText">股市開盤中</span>
+                    </div>
+
+                    <div id="userInfoHeader" class="hidden items-center space-x-2">
+                        <span id="userRoleTag" class="px-3 py-1 text-xs font-bold rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"></span>
+                        <button onclick="logoutUser()" class="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-xl transition-colors" title="安全登出">
+                            <i class="fa-solid fa-right-from-bracket text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- News Ticker Bar -->
+    <div class="bg-slate-900/90 border-b border-slate-800 overflow-hidden py-1.5 px-4 flex items-center text-xs">
+        <button onclick="openNewsHistoryModal()" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase me-3 shrink-0 border border-amber-500/30 flex items-center space-x-1.5 transition-colors cursor-pointer" title="點擊查看所有歷史快訊紀錄">
+            <i class="fa-solid fa-bullhorn text-amber-400"></i>
+            <span>歷史快訊</span>
+            <span id="newsCountBadge" class="bg-amber-400 text-slate-950 rounded-full px-1.5 py-0.2 text-[9px] font-black ms-0.5">0</span>
+        </button>
+        <div class="overflow-hidden w-full relative">
+            <div id="newsMarqueeText" class="animate-marquee text-slate-300 font-medium">
+                歡迎使用班級股市交易系統！請先選擇身份號碼登入系統進行交易...
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- Login Card -->
+        <div id="loginView" class="max-w-md mx-auto my-10 glass-panel rounded-3xl p-8 shadow-2xl space-y-6">
+            <div class="text-center space-y-2">
+                <div class="inline-flex p-4 rounded-2xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-inner">
+                    <i class="fa-solid fa-user-lock text-3xl"></i>
+                </div>
+                <h2 class="text-2xl font-black text-white tracking-tight">登入股市交易帳戶</h2>
+                <p class="text-xs text-slate-400">請選擇身分並輸入個人專屬密碼 (學生預設 123)</p>
+            </div>
+
+            <div class="space-y-4 pt-2">
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1.5">身分類別</label>
+                    <select id="loginRoleSelect" onchange="handleRoleSwitch()" class="w-full bg-slate-800/90 border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors">
+                        <option value="student">🎓 學生登入 (01 - 23 號)</option>
+                        <option value="teacher">👑 導師 / 股市管理員</option>
+                    </select>
+                </div>
+
+                <div id="studentSelectWrapper">
+                    <label class="block text-xs font-bold text-slate-300 mb-1.5">選擇學生座號與姓名</label>
+                    <select id="studentRosterSelect" class="w-full bg-slate-800/90 border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1.5">登入密碼</label>
+                    <div class="relative">
+                        <input type="password" id="loginPasswordInput" placeholder="請輸入密碼 (預設: 123)" class="w-full bg-slate-800/90 border border-slate-700/80 rounded-xl px-4 py-3 pr-10 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors">
+                        <button type="button" onclick="togglePasswordVisibility('loginPasswordInput', 'pwdEyeIcon')" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+                            <i id="pwdEyeIcon" class="fa-solid fa-eye text-xs"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button onclick="performLogin()" class="w-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-emerald-500 hover:opacity-95 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-600/30 transition-all text-sm tracking-wider uppercase">
+                    進入股市終端 <i class="fa-solid fa-arrow-right me-1"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="studentDashboardView" class="hidden space-y-6">
+            <!-- Student Summary Banner -->
+            <div class="glass-panel rounded-2xl p-6 shadow-xl">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-indigo-500/20 border border-indigo-400/30">
+                            <span id="stAvatarSeat">--</span>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex items-center space-x-2">
+                                <h2 class="text-2xl font-black text-white" id="stDisplayName">---</h2>
+                                <span id="stRankBadge" class="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold px-2.5 py-0.5 rounded-full">全班排名: --</span>
+                            </div>
+                            <p class="text-xs text-slate-400">
+                                所屬企業團隊：<span id="stCompanyName" class="text-indigo-400 font-bold">---</span>
+                                <span class="ms-2 text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-semibold">自家上市企業</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Asset Metrics -->
+                    <div class="grid grid-cols-3 gap-3 sm:gap-4 lg:w-1/2">
+                        <div class="bg-slate-800/80 rounded-xl p-3.5 border border-slate-700/60 shadow-inner">
+                            <span class="text-[11px] text-slate-400 font-bold block">可用現金 (班幣)</span>
+                            <p id="userCashDisplay" class="text-lg sm:text-xl font-extrabold text-emerald-400 mt-1">$0</p>
+                        </div>
+                        <div class="bg-slate-800/80 rounded-xl p-3.5 border border-slate-700/60 shadow-inner">
+                            <span class="text-[11px] text-slate-400 font-bold block">股票總市值</span>
+                            <p id="userStockValDisplay" class="text-lg sm:text-xl font-extrabold text-indigo-400 mt-1">$0</p>
+                        </div>
+                        <div class="bg-slate-800/80 rounded-xl p-3.5 border border-slate-700/60 shadow-inner">
+                            <span class="text-[11px] text-slate-400 font-bold block">總資產淨值</span>
+                            <p id="userNetWorthDisplay" class="text-lg sm:text-xl font-extrabold text-amber-400 mt-1">$0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 5 Stock Cards -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-base font-bold text-white flex items-center">
+                            <i class="fa-solid fa-chart-line text-emerald-400 me-2"></i>上市企業行情與趨勢圖
+                        </h3>
+                        <span class="text-xs text-slate-400 font-mono">Live Interactive Charts</span>
+                    </div>
+
+                    <div id="stockCardsContainer" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- My Portfolio Summary -->
+                <div class="space-y-6">
+                    <div class="glass-panel rounded-2xl p-5 shadow-xl space-y-4">
+                        <h3 class="text-base font-bold text-white flex items-center justify-between">
+                            <span><i class="fa-solid fa-wallet text-indigo-400 me-2"></i>我的持股明細</span>
+                            <span class="text-xs text-slate-400 font-normal">資產配置</span>
+                        </h3>
+                        <div class="overflow-x-auto custom-scrollbar">
+                            <table class="w-full text-left border-collapse text-xs">
+                                <thead>
+                                    <tr class="border-b border-slate-700/80 text-slate-400 font-bold">
+                                        <th class="pb-2.5">股票名稱</th>
+                                        <th class="pb-2.5">持有股數</th>
+                                        <th class="pb-2.5">目前單價</th>
+                                        <th class="pb-2.5 text-right">快速操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="portfolioTableBody" class="divide-y divide-slate-800 text-slate-200">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl p-5 shadow-xl space-y-3">
+                <h3 class="text-base font-bold text-white flex items-center">
+                    <i class="fa-solid fa-clock-rotate-left text-purple-400 me-2"></i>個人近期股票交易紀錄
+                </h3>
+                <div class="overflow-x-auto custom-scrollbar max-h-48">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="border-b border-slate-700 text-slate-400">
+                                <th class="py-2">時間</th>
+                                <th class="py-2">類別</th>
+                                <th class="py-2">股票名稱</th>
+                                <th class="py-2">成交單價</th>
+                                <th class="py-2">數量</th>
+                                <th class="py-2 text-right">交易總額</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentTradeLogsBody" class="divide-y divide-slate-800 text-slate-300">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="teacherDashboardView" class="hidden space-y-6">
+            <!-- Control Toolbar Header -->
+            <div class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-black text-white flex items-center">
+                        <i class="fa-solid fa-sliders text-indigo-400 me-2"></i>全班股市導師管理後台
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">即時控制市場狀態、獎懲發放、發布市場新聞事件與重置帳戶</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2.5">
+                    <button id="toggleMarketBtn" onclick="toggleMarketStatus()" class="px-4 py-2.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-md shadow-rose-600/20 flex items-center space-x-2">
+                        <i class="fa-solid fa-power-off"></i>
+                        <span id="toggleMarketText">切換休市</span>
+                    </button>
+                    <button onclick="triggerMarketFluctuation()" class="px-4 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white transition-all shadow-md shadow-indigo-600/20 flex items-center space-x-2">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                        <span>隨機價格波動 (-10元 ~ +10元)</span>
+                    </button>
+                    <button onclick="openNewsEventModal()" class="px-4 py-2.5 text-xs font-bold rounded-xl bg-amber-600 hover:bg-amber-500 text-white transition-all shadow-md shadow-amber-600/20 flex items-center space-x-2">
+                        <i class="fa-solid fa-newspaper"></i>
+                        <span>發布重大新聞事件</span>
+                    </button>
+                    <button onclick="openResetConfirmModal()" class="px-3 py-2.5 text-xs font-bold rounded-xl bg-slate-800 hover:bg-rose-900/60 text-slate-300 hover:text-rose-300 border border-slate-700 transition-all flex items-center space-x-1.5" title="將所有數據重置為預設值">
+                        <i class="fa-solid fa-rotate-left"></i>
+                        <span>全系統重置</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Teacher Overview Charts -->
+            <div class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white flex items-center">
+                        <i class="fa-solid fa-chart-line text-emerald-400 me-2"></i>全市場 5 大企業即時行情與走勢
+                    </h3>
+                    <span class="text-xs text-slate-400 font-mono">Market Visualizer</span>
+                </div>
+                <div id="teacherStockCardsContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- Student Roster Table -->
+            <div class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-lg font-bold text-white flex items-center">
+                            <i class="fa-solid fa-trophy text-amber-400 me-2"></i>全班 23 位學生資產排行榜 (依總資產排序)
+                        </h3>
+                        <p class="text-xs text-slate-400">點擊按鈕可直接增減學生班幣或重置密碼 (預設學生密碼皆為 123)</p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-800/80 text-slate-300 text-xs border-b border-slate-700 font-bold">
+                                <th class="py-3 px-3">排名</th>
+                                <th class="py-3 px-3">座號</th>
+                                <th class="py-3 px-3">姓名</th>
+                                <th class="py-3 px-3">所屬企業團隊</th>
+                                <th class="py-3 px-3">可用現金 (班幣)</th>
+                                <th class="py-3 px-3">股票市值</th>
+                                <th class="py-3 px-3">總資產淨值</th>
+                                <th class="py-3 px-3 text-center">班幣獎懲管理</th>
+                                <th class="py-3 px-3 text-center">密碼重置</th>
+                            </tr>
+                        </thead>
+                        <tbody id="teacherRosterTableBody" class="divide-y divide-slate-800/60 text-slate-200">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Trade Modal -->
+    <div id="tradeModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+        <div class="glass-panel rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-700 space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-700/80 pb-4">
+                <div>
+                    <h3 class="text-xl font-black text-white" id="tradeModalStockName">---</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">當前單股價格：<span id="tradeModalStockPrice" class="text-emerald-400 font-bold text-sm">$0</span></p>
+                </div>
+                <button onclick="closeTradeModal()" class="text-slate-400 hover:text-white transition-colors p-1">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Buy / Sell Mode Toggle -->
+            <div class="grid grid-cols-2 gap-2 p-1.5 bg-slate-800/90 rounded-2xl border border-slate-700">
+                <button id="tradeTypeBuyBtn" onclick="setTradeType('buy')" class="py-2.5 text-xs font-bold rounded-xl bg-indigo-600 text-white transition-colors">買進股票</button>
+                <button id="tradeTypeSellBtn" onclick="setTradeType('sell')" class="py-2.5 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition-colors">賣出股票</button>
+            </div>
+
+            <!-- User Balance Context -->
+            <div class="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/60 text-xs space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-slate-400 font-medium">可用現金 (班幣)：</span>
+                    <span id="tradeModalUserCash" class="font-bold text-emerald-400">$0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400 font-medium">持有此股票數：</span>
+                    <span id="tradeModalUserShares" class="font-bold text-indigo-300">0 股</span>
+                </div>
+            </div>
+
+            <!-- Quantity Input & Shortcuts -->
+            <div class="space-y-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-xs font-bold text-slate-300">交易數量 (股)</label>
+                    <div class="flex space-x-1">
+                        <button onclick="setTradeQtyShortcut(1)" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 rounded border border-slate-700">+1</button>
+                        <button onclick="setTradeQtyShortcut(5)" class="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 rounded border border-slate-700">+5</button>
+                        <button onclick="setTradeQtyMax()" class="px-2 py-0.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-[10px] text-indigo-300 rounded border border-indigo-500/30 font-bold">最大限額</button>
+                    </div>
+                </div>
+                <input type="number" id="tradeQuantityInput" min="1" value="1" oninput="calculateTradeTotal()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-100 focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <!-- Total Cost Summary -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-800 text-sm">
+                <span class="text-slate-400 font-bold">預估總金額：</span>
+                <span id="tradeTotalCost" class="text-xl font-black text-amber-400">$0 班幣</span>
+            </div>
+
+            <!-- Action Confirm Button -->
+            <button id="confirmTradeBtn" onclick="executeTrade()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-lg shadow-indigo-600/30">
+                確認買進股票
+            </button>
+        </div>
+    </div>
+
+    <!-- News Event Modal -->
+    <div id="newsEventModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+        <div class="glass-panel rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-700 space-y-5">
+            <div class="flex items-center justify-between border-b border-slate-700/80 pb-4">
+                <h3 class="text-lg font-bold text-white flex items-center">
+                    <i class="fa-solid fa-newspaper text-amber-400 me-2"></i>發布股市重大快訊
+                </h3>
+                <button onclick="closeNewsEventModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">快訊標題 / 內文</label>
+                    <textarea id="newsTextInput" rows="3" placeholder="請輸入新聞事件內容..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">影響目標企業</label>
+                    <select id="newsTargetCompany" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                        <option value="all">🌐 全市場所有公司</option>
+                        <option value="group1">荔枝烏龍有限公司</option>
+                        <option value="group2">非常機車無限公司</option>
+                        <option value="group3">五月花有限公司</option>
+                        <option value="group4">台基電有限公司</option>
+                        <option value="group5">比奇堡居民公司</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">股價變動金額 (正數上漲 / 負數下跌 元)</label>
+                    <input type="number" id="newsImpactAmount" value="10" placeholder="例如: 15 或 -10" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                </div>
+                <button onclick="publishNewsEvent()" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-bold py-3 rounded-xl transition-all text-xs shadow-lg shadow-amber-600/30">
+                    發布快訊並套用影響
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- News History Modal -->
+    <div id="newsHistoryModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+        <div class="glass-panel rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-700 space-y-4 max-h-[85vh] flex flex-col">
+            <div class="flex items-center justify-between border-b border-slate-700/80 pb-3 shrink-0">
+                <div class="flex items-center space-x-2.5">
+                    <div class="p-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl">
+                        <i class="fa-solid fa-newspaper text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-bold text-white">重大快訊歷史紀錄</h3>
+                        <p class="text-xs text-slate-400">完整記錄所有導師發布過的市場新聞與價格影響</p>
+                    </div>
+                </div>
+                <button onclick="closeNewsHistoryModal()" class="text-slate-400 hover:text-white p-1 transition-colors">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <!-- News History Scrollable Container -->
+            <div id="newsHistoryList" class="overflow-y-auto custom-scrollbar flex-1 space-y-3 pr-1">
+                <!-- Populated dynamically -->
+            </div>
+
+            <div class="pt-2 border-t border-slate-800 text-right shrink-0">
+                <button onclick="closeNewsHistoryModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors">
+                    關閉視窗
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Reset Modal -->
+    <div id="resetConfirmModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+        <div class="glass-panel rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-rose-500/30 space-y-4 text-center">
+            <div class="inline-flex p-3 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">確認全系統重置？</h3>
+            <p class="text-xs text-slate-300">這將清除目前所有學生的個人交易紀錄與現金變動，恢復為初期開盤設定。此操作不可逆！</p>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="closeResetConfirmModal()" class="py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition-colors">取消</button>
+                <button onclick="executeSystemReset()" class="py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-colors shadow-lg shadow-rose-600/30">確認重置</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // Firebase 與實時同步自動配置
+        // ==========================================
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'classroom-stock-market';
+        let firebaseConfig = null;
+
+        try {
+            if (typeof __firebase_config !== 'undefined') {
+                firebaseConfig = typeof __firebase_config === 'string' ? JSON.parse(__firebase_config) : __firebase_config;
+            }
+        } catch (e) {
+            console.warn("無法解析環境傳入的 Firebase 設定", e);
+        }
+
+        let db = null;
+        let auth = null;
+        let isFirebaseConnected = false;
+
+        // 廣播頻道：讓同瀏覽器不同分頁間達到 0 延遲同步
+        const broadcastChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('class_stock_broadcast') : null;
+        if (broadcastChannel) {
+            broadcastChannel.onmessage = (event) => {
+                if (event.data && event.data.type === 'STATE_UPDATE') {
+                    applyStateFromData(event.data.payload);
+                }
+            };
+        }
+
+        const STUDENT_ROSTER = [
+            { id: "01", name: "李彥霆", company: "荔枝烏龍有限公司", homeGroup: "group1" },
+            { id: "02", name: "施柏任", company: "荔枝烏龍有限公司", homeGroup: "group1" },
+            { id: "03", name: "余桓宇", company: "非常機車無限公司", homeGroup: "group2" },
+            { id: "04", name: "陳彥廷", company: "五月花有限公司", homeGroup: "group3" },
+            { id: "05", name: "林宸睿", company: "荔枝烏龍有限公司", homeGroup: "group1" },
+            { id: "06", name: "尹孮任", company: "台基電有限公司", homeGroup: "group4" },
+            { id: "07", name: "許祐愷", company: "比奇堡居民公司", homeGroup: "group5" },
+            { id: "08", name: "黃奕維", company: "非常機車無限公司", homeGroup: "group2" },
+            { id: "09", name: "毛柏碩", company: "台基電有限公司", homeGroup: "group4" },
+            { id: "10", name: "郭軒甫", company: "比奇堡居民公司", homeGroup: "group5" },
+            { id: "11", name: "吳昱宏", company: "五月花有限公司", homeGroup: "group3" },
+            { id: "12", name: "賴貞澄", company: "荔枝烏龍有限公司", homeGroup: "group1" },
+            { id: "13", name: "黃真己", company: "比奇堡居民公司", homeGroup: "group5" },
+            { id: "14", name: "陳睿蓁", company: "台基電有限公司", homeGroup: "group4" },
+            { id: "15", name: "林岑語", company: "五月花有限公司", homeGroup: "group3" },
+            { id: "16", name: "郭芓晴", company: "非常機車無限公司", homeGroup: "group2" },
+            { id: "17", name: "黃芝筠", company: "荔枝烏龍有限公司", homeGroup: "group1" },
+            { id: "18", name: "劉亭葶", company: "荔枝烏龍有限公司", homeGroup: "group1" },
+            { id: "19", name: "薛安媛", company: "非常機車無限公司", homeGroup: "group2" },
+            { id: "20", name: "李昕昱", company: "比奇堡居民公司", homeGroup: "group5" },
+            { id: "21", name: "傅琬霓", company: "五月花有限公司", homeGroup: "group3" },
+            { id: "22", name: "郭苡薇", company: "非常機車無限公司", homeGroup: "group2" },
+            { id: "23", name: "鍾依仁", company: "台基電有限公司", homeGroup: "group4" }
+        ];
+
+        const DEFAULT_STOCKS = {
+            "group1": { id: "group1", name: "荔枝烏龍有限公司", price: 100, change: 0, history: [90, 95, 98, 100], color: "#3b82f6" },
+            "group2": { id: "group2", name: "非常機車無限公司", price: 100, change: 0, history: [85, 92, 96, 100], color: "#10b981" },
+            "group3": { id: "group3", name: "五月花有限公司", price: 100, change: 0, history: [105, 102, 101, 100], color: "#f59e0b" },
+            "group4": { id: "group4", name: "台基電有限公司", price: 100, change: 0, history: [80, 88, 95, 100], color: "#8b5cf6" },
+            "group5": { id: "group5", name: "比奇堡居民公司", price: 100, change: 0, history: [95, 97, 99, 100], color: "#ec4899" }
+        };
+
+        window.currentUser = null;
+        window.isMarketOpen = true;
+        window.stocks = JSON.parse(JSON.stringify(DEFAULT_STOCKS));
+        window.studentsData = {};
+        window.newsHeadline = "歡迎使用班級股市交易系統！學生預設密碼為 123，請登入進行交易...";
+        window.newsHistory = [];
+        window.tradeLogs = [];
+        window.selectedStockForTrade = null;
+        window.activeTradeType = 'buy';
+        window.chartInstances = {};
+
+        function createInitialHoldings(homeGroup) {
+            const holdings = { group1: 0, group2: 0, group3: 0, group4: 0, group5: 0 };
+            if (homeGroup && holdings.hasOwnProperty(homeGroup)) {
+                holdings[homeGroup] = 15;
+            }
+            return holdings;
+        }
+
+        function ensureStudentsData() {
+            if (!window.studentsData) window.studentsData = {};
+            STUDENT_ROSTER.forEach(s => {
+                if (!window.studentsData[s.id]) {
+                    window.studentsData[s.id] = {
+                        id: s.id,
+                        name: s.name,
+                        company: s.company,
+                        homeGroup: s.homeGroup,
+                        password: "123",
+                        cash: 1000,
+                        holdings: createInitialHoldings(s.homeGroup)
+                    };
+                } else {
+                    if (!window.studentsData[s.id].password) {
+                        window.studentsData[s.id].password = "123";
+                    }
+                }
+            });
+        }
+
+        function applyStateFromData(data) {
+            if (!data) return;
+            if (typeof data.isMarketOpen !== 'undefined') window.isMarketOpen = data.isMarketOpen;
+            if (data.stocks) window.stocks = data.stocks;
+            if (data.students && Object.keys(data.students).length > 0) {
+                window.studentsData = Object.assign({}, window.studentsData, data.students);
+            }
+            if (data.newsHeadline) window.newsHeadline = data.newsHeadline;
+            if (data.newsHistory) window.newsHistory = data.newsHistory;
+            if (data.tradeLogs) window.tradeLogs = data.tradeLogs;
+
+            ensureStudentsData();
+            updateUIComponents();
+        }
+
+        async function initFirebaseSync() {
+            initLocalState();
+            ensureStudentsData();
+            populateStudentSelect();
+            updateUIComponents();
+
+            if (firebaseConfig && firebaseConfig.apiKey) {
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    // Firestore 身分驗證 (存取權限必備)
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        try {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } catch (e) {
+                            await signInAnonymously(auth);
+                        }
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    isFirebaseConnected = true;
+
+                    const syncTag = document.getElementById('syncModeTag');
+                    if (syncTag) {
+                        syncTag.textContent = "⚡ 雲端實時同步中";
+                        syncTag.className = "text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold px-2 py-0.5 rounded-full animate-pulse";
+                    }
+
+                    // 符合規範的公共數據集合路徑
+                    const marketRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_data', 'current');
+                    
+                    onSnapshot(marketRef, (snapshot) => {
+                        if (snapshot.exists()) {
+                            applyStateFromData(snapshot.data());
+                            if (syncTag) {
+                                syncTag.classList.remove('animate-pulse');
+                                syncTag.textContent = "⚡ 雲端已連線同步";
+                            }
+                        } else {
+                            seedFreshState();
+                        }
+                    }, (err) => {
+                        console.warn("Firestore 監聽失敗，降級本地模式:", err);
+                        fallbackToLocalMode();
+                    });
+
+                    return;
+                } catch (e) {
+                    console.warn("Firebase 初始化失敗:", e);
+                    fallbackToLocalMode();
+                }
+            } else {
+                fallbackToLocalMode();
+            }
+        }
+
+        function fallbackToLocalMode() {
+            isFirebaseConnected = false;
+            const syncTag = document.getElementById('syncModeTag');
+            if (syncTag) {
+                syncTag.textContent = "💻 多分頁廣播同步模式";
+                syncTag.className = "text-[10px] bg-slate-700 text-slate-300 border border-slate-600 font-semibold px-2 py-0.5 rounded-full";
+            }
+        }
+
+        function initLocalState() {
+            try {
+                const saved = localStorage.getItem('class_stock_market_v3');
+                if (saved) {
+                    applyStateFromData(JSON.parse(saved));
+                }
+            } catch (e) {
+                console.warn("LocalStorage 讀取警告:", e);
+            }
+            ensureStudentsData();
+            updateUIComponents();
+        }
+
+        function seedFreshState() {
+            const studentsObj = {};
+            STUDENT_ROSTER.forEach(s => {
+                studentsObj[s.id] = {
+                    id: s.id,
+                    name: s.name,
+                    company: s.company,
+                    homeGroup: s.homeGroup,
+                    password: "123",
+                    cash: 1000,
+                    holdings: createInitialHoldings(s.homeGroup)
+                };
+            });
+            window.isMarketOpen = true;
+            window.stocks = JSON.parse(JSON.stringify(DEFAULT_STOCKS));
+            window.studentsData = studentsObj;
+            window.newsHeadline = "班級股市正式開市！每位同學獲得基礎資金 $1,000 班幣與自家公司 15 股股票。";
+            
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            const dateStr = `${now.getMonth() + 1}/${now.getDate()}`;
+            
+            window.newsHistory = [{
+                id: Date.now(),
+                title: "班級股市正式開市！每位同學獲得基礎資金 $1,000 班幣與自家公司 15 股股票。",
+                targetName: "全市場所有公司",
+                impactAmount: 0,
+                time: timeStr,
+                date: dateStr
+            }];
+            window.tradeLogs = [];
+            saveStateToCloudAndLocal();
+        }
+
+        async function saveStateToCloudAndLocal() {
+            ensureStudentsData();
+            const payload = {
+                isMarketOpen: window.isMarketOpen,
+                stocks: window.stocks,
+                students: window.studentsData,
+                newsHeadline: window.newsHeadline,
+                newsHistory: window.newsHistory,
+                tradeLogs: window.tradeLogs
+            };
+
+            // 1. 寫入本地 LocalStorage
+            try {
+                localStorage.setItem('class_stock_market_v3', JSON.stringify(payload));
+            } catch (e) {}
+
+            // 2. 跨分頁廣播 (讓同一瀏覽器打開的所有頁面秒同步)
+            if (broadcastChannel) {
+                try {
+                    broadcastChannel.postMessage({ type: 'STATE_UPDATE', payload: payload });
+                } catch (e) {}
+            }
+
+            // 3. 雲端同步到 Firestore
+            if (isFirebaseConnected && db && auth?.currentUser) {
+                try {
+                    const marketRef = doc(db, 'artifacts', appId, 'public', 'data', 'market_data', 'current');
+                    await setDoc(marketRef, payload);
+                } catch (err) {
+                    console.error("Firestore 寫入失敗:", err);
+                }
+            }
+
+            updateUIComponents();
+        }
+
+        function updateUIComponents() {
+            const marquee = document.getElementById('newsMarqueeText');
+            if (marquee) marquee.textContent = window.newsHeadline;
+            
+            const countBadge = document.getElementById('newsCountBadge');
+            if (countBadge) countBadge.textContent = (window.newsHistory || []).length;
+
+            updateMarketStatusUI();
+            refreshCurrentView();
+        }
+
+        window.saveStateToLocal = saveStateToCloudAndLocal;
+
+        window.updateMarketStatusUI = function() {
+            const badge = document.getElementById('marketStatusBadge');
+            const badgeText = document.getElementById('marketBadgeText');
+            const toggleBtnText = document.getElementById('toggleMarketText');
+            const toggleBtn = document.getElementById('toggleMarketBtn');
+
+            if (window.isMarketOpen) {
+                if (badge) {
+                    badge.className = "inline-flex items-center text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 font-bold border border-emerald-500/30";
+                }
+                if (badgeText) badgeText.textContent = "股市開盤中";
+                if (toggleBtnText) toggleBtnText.textContent = "切換休市";
+                if (toggleBtn) toggleBtn.className = "px-4 py-2.5 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition-all shadow-md shadow-rose-600/20 flex items-center space-x-2";
+            } else {
+                if (badge) {
+                    badge.className = "inline-flex items-center text-xs px-3 py-1 rounded-full bg-rose-500/20 text-rose-400 font-bold border border-rose-500/30";
+                }
+                if (badgeText) badgeText.textContent = "股市休市中";
+                if (toggleBtnText) toggleBtnText.textContent = "切換開盤";
+                if (toggleBtn) toggleBtn.className = "px-4 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md shadow-emerald-600/20 flex items-center space-x-2";
+            }
+        };
+
+        window.showToast = function(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            if (!container) return;
+            
+            const toast = document.createElement('div');
+            const colors = {
+                success: 'bg-emerald-900/90 border-emerald-500 text-emerald-100',
+                error: 'bg-rose-900/90 border-rose-500 text-rose-100',
+                info: 'bg-indigo-900/90 border-indigo-500 text-indigo-100'
+            };
+
+            toast.className = `p-3.5 rounded-2xl border ${colors[type] || colors.info} backdrop-blur-md shadow-xl text-xs font-bold pointer-events-auto transition-all transform translate-y-2 opacity-0 flex items-center justify-between`;
+            toast.innerHTML = `<span>${message}</span><i class="fa-solid fa-xmark cursor-pointer ms-2 opacity-70 hover:opacity-100" onclick="this.parentElement.remove()"></i>`;
+
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                if (toast.parentElement) toast.remove();
+            }, 3500);
+        };
+
+        window.toggleMarketStatus = function() {
+            window.isMarketOpen = !window.isMarketOpen;
+            saveStateToCloudAndLocal();
+            window.showToast(window.isMarketOpen ? '股市已成功開盤！' : '股市已關閉休市！', window.isMarketOpen ? 'success' : 'info');
+        };
+
+        window.triggerMarketFluctuation = function() {
+            if (!window.isMarketOpen) {
+                window.showToast('休市期間無法觸發價格波動！', 'error');
+                return;
+            }
+            Object.values(window.stocks).forEach(s => {
+                const diff = Math.floor(Math.random() * 21) - 10;
+                const oldPrice = s.price;
+                s.price = Math.max(10, oldPrice + diff);
+                s.change = s.price - oldPrice;
+                if (!s.history) s.history = [100];
+                s.history.push(s.price);
+            });
+            saveStateToCloudAndLocal();
+            window.showToast('股市隨機價格波動已觸發！', 'success');
+        };
+
+        window.teacherAdjustCash = function(studentId, amount) {
+            ensureStudentsData();
+            const student = window.studentsData[studentId];
+            if (!student) return;
+            student.cash = Math.max(0, student.cash + amount);
+            
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            if (!window.tradeLogs) window.tradeLogs = [];
+            window.tradeLogs.push({
+                studentId: student.id,
+                studentName: student.name,
+                stockName: '導師班幣調整',
+                type: amount >= 0 ? 'bonus' : 'penalty',
+                price: Math.abs(amount),
+                qty: 1,
+                total: Math.abs(amount),
+                time: timeStr
+            });
+
+            saveStateToCloudAndLocal();
+            window.showToast(`已為 ${student.name} ${amount >= 0 ? '增加' : '扣除'} $${Math.abs(amount)} 班幣`, 'success');
+        };
+
+        window.teacherResetPassword = function(studentId) {
+            ensureStudentsData();
+            const student = window.studentsData[studentId];
+            if (!student) return;
+            student.password = '123';
+            saveStateToCloudAndLocal();
+            window.showToast(`已將 ${student.name} 的密碼重置為預設值 (123)`, 'info');
+        };
+
+        window.refreshCurrentView = function() {
+            const loginView = document.getElementById('loginView');
+            const stView = document.getElementById('studentDashboardView');
+            const tcView = document.getElementById('teacherDashboardView');
+            const userHeader = document.getElementById('userInfoHeader');
+            const userRoleTag = document.getElementById('userRoleTag');
+
+            if (!window.currentUser) {
+                if (loginView) loginView.classList.remove('hidden');
+                if (stView) stView.classList.add('hidden');
+                if (tcView) tcView.classList.add('hidden');
+                if (userHeader) userHeader.classList.add('hidden');
+                return;
+            }
+
+            if (loginView) loginView.classList.add('hidden');
+            if (userHeader) userHeader.classList.remove('hidden');
+
+            if (window.currentUser.role === 'student') {
+                ensureStudentsData();
+                const latestData = window.studentsData[window.currentUser.id];
+                if (latestData) {
+                    window.currentUser = { ...latestData, role: 'student' };
+                }
+                if (userRoleTag) userRoleTag.textContent = `${window.currentUser.id}號 ${window.currentUser.name}`;
+                if (stView) stView.classList.remove('hidden');
+                if (tcView) tcView.classList.add('hidden');
+                renderStudentDashboard();
+            } else {
+                if (userRoleTag) userRoleTag.textContent = "👑 導師管理員";
+                if (stView) stView.classList.add('hidden');
+                if (tcView) tcView.classList.remove('hidden');
+                renderTeacherDashboard();
+            }
+        };
+
+        window.handleRoleSwitch = function() {
+            const roleSelect = document.getElementById('loginRoleSelect');
+            const studentWrapper = document.getElementById('studentSelectWrapper');
+            if (roleSelect && studentWrapper) {
+                studentWrapper.style.display = roleSelect.value === 'teacher' ? 'none' : 'block';
+            }
+        };
+
+        window.togglePasswordVisibility = function(inputId, iconId) {
+            const input = document.getElementById(inputId);
+            const icon = document.getElementById(iconId);
+            if (!input || !icon) return;
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = 'fa-solid fa-eye-slash text-xs';
+            } else {
+                input.type = 'password';
+                icon.className = 'fa-solid fa-eye text-xs';
+            }
+        };
+
+        window.performLogin = function() {
+            const role = document.getElementById('loginRoleSelect').value;
+            const pwdInput = document.getElementById('loginPasswordInput');
+            const pwd = pwdInput ? pwdInput.value.trim() : '';
+
+            if (role === 'teacher') {
+                if (pwd === 'admin888') {
+                    window.currentUser = { role: 'teacher' };
+                    refreshCurrentView();
+                    window.showToast('導師管理員登入成功！', 'success');
+                } else {
+                    window.showToast('導師密碼不正確！(預設密碼: admin888)', 'error');
+                }
+            } else {
+                ensureStudentsData();
+                const stId = document.getElementById('studentRosterSelect').value;
+                const student = window.studentsData[stId];
+                if (student && String(student.password).trim() === pwd) {
+                    window.currentUser = { ...student, role: 'student' };
+                    refreshCurrentView();
+                    window.showToast(`歡迎登入，${student.name}！`, 'success');
+                } else {
+                    window.showToast('學生座號與密碼不相符！(預設密碼: 123)', 'error');
+                }
+            }
+        };
+
+        window.logoutUser = function() {
+            window.currentUser = null;
+            refreshCurrentView();
+            window.showToast('已成功登出系統', 'info');
+        };
+
+        function calculateStudentAssets(studentId) {
+            ensureStudentsData();
+            const st = window.studentsData[studentId];
+            if (!st) return { cash: 0, stockValue: 0, netWorth: 0 };
+            
+            let stockVal = 0;
+            const holdings = st.holdings || {};
+            Object.keys(window.stocks).forEach(stockId => {
+                const qty = holdings[stockId] || 0;
+                const price = window.stocks[stockId]?.price || 0;
+                stockVal += qty * price;
+            });
+
+            return {
+                cash: st.cash || 0,
+                stockValue: stockVal,
+                netWorth: (st.cash || 0) + stockVal
+            };
+        }
+
+        function getSortedStudentsRanked() {
+            ensureStudentsData();
+            const list = Object.values(window.studentsData).map(st => {
+                const assets = calculateStudentAssets(st.id);
+                return {
+                    ...st,
+                    ...assets
+                };
+            });
+            list.sort((a, b) => b.netWorth - a.netWorth);
+            return list;
+        }
+
+        function renderStockChart(canvasId, stockData) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            if (window.chartInstances[canvasId]) {
+                window.chartInstances[canvasId].destroy();
+            }
+            
+            const historyData = (stockData.history && stockData.history.length > 0) ? stockData.history : [stockData.price];
+            const labels = historyData.map((_, i) => `T${i + 1}`);
+            
+            window.chartInstances[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: historyData,
+                        borderColor: stockData.color || '#6366f1',
+                        backgroundColor: (stockData.color || '#6366f1') + '22',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: 2,
+                        pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => ` 股價: $${ctx.parsed.y}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: { 
+                            display: true,
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#64748b', font: { size: 9 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        window.renderStudentDashboard = function() {
+            if (!window.currentUser || window.currentUser.role !== 'student') return;
+            
+            const stId = window.currentUser.id;
+            ensureStudentsData();
+            const st = window.studentsData[stId];
+            if (!st) return;
+
+            const rankedList = getSortedStudentsRanked();
+            const rankIndex = rankedList.findIndex(item => item.id === stId);
+            const userRank = rankIndex !== -1 ? rankIndex + 1 : '--';
+            const assets = calculateStudentAssets(stId);
+
+            document.getElementById('stAvatarSeat').textContent = `${st.id}號`;
+            document.getElementById('stDisplayName').textContent = st.name;
+            document.getElementById('stRankBadge').textContent = `全班排名: 第 ${userRank} 名`;
+            document.getElementById('stCompanyName').textContent = st.company;
+            document.getElementById('userCashDisplay').textContent = `$${assets.cash.toLocaleString()}`;
+            document.getElementById('userStockValDisplay').textContent = `$${assets.stockValue.toLocaleString()}`;
+            document.getElementById('userNetWorthDisplay').textContent = `$${assets.netWorth.toLocaleString()}`;
+
+            // Render Stock Cards
+            const stockCardsContainer = document.getElementById('stockCardsContainer');
+            if (stockCardsContainer) {
+                stockCardsContainer.innerHTML = '';
+                Object.values(window.stocks).forEach(stock => {
+                    const changeClass = stock.change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+                    const changeIcon = stock.change >= 0 ? 'fa-caret-up' : 'fa-caret-down';
+                    const changeSign = stock.change >= 0 ? '+' : '';
+                    
+                    const card = document.createElement('div');
+                    card.className = "glass-panel glass-panel-hover rounded-2xl p-4 border border-slate-700/80 flex flex-col justify-between space-y-3";
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">${stock.id.toUpperCase()}</span>
+                                <h4 class="text-sm font-bold text-white mt-1">${stock.name}</h4>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-lg font-extrabold text-white">$${stock.price}</div>
+                                <div class="text-xs font-bold ${changeClass}">
+                                    <i class="fa-solid ${changeIcon} me-0.5"></i>${changeSign}${stock.change}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="h-24 w-full">
+                            <canvas id="chart_st_${stock.id}"></canvas>
+                        </div>
+                        <button onclick="openTradeModal('${stock.id}')" class="w-full py-2 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-xl text-xs font-bold transition-all shadow-md">
+                            <i class="fa-solid fa-right-left me-1.5"></i>交易下單
+                        </button>
+                    `;
+                    stockCardsContainer.appendChild(card);
+                    setTimeout(() => renderStockChart(`chart_st_${stock.id}`, stock), 0);
+                });
+            }
+
+            // Render Portfolio Table
+            const portfolioBody = document.getElementById('portfolioTableBody');
+            if (portfolioBody) {
+                portfolioBody.innerHTML = '';
+                Object.values(window.stocks).forEach(stock => {
+                    const shares = (st.holdings && st.holdings[stock.id]) || 0;
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-800/40 transition-colors";
+                    tr.innerHTML = `
+                        <td class="py-2.5 font-bold text-white">${stock.name}</td>
+                        <td class="py-2.5 font-bold text-indigo-300">${shares} 股</td>
+                        <td class="py-2.5">$${stock.price}</td>
+                        <td class="py-2.5 text-right space-x-1">
+                            <button onclick="openTradeModal('${stock.id}')" class="px-2.5 py-1 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 rounded-lg text-[11px] font-bold border border-indigo-500/30">
+                                交易
+                            </button>
+                        </td>
+                    `;
+                    portfolioBody.appendChild(tr);
+                });
+            }
+
+            // Render Trade Logs
+            const logsBody = document.getElementById('studentTradeLogsBody');
+            if (logsBody) {
+                logsBody.innerHTML = '';
+                const myLogs = (window.tradeLogs || []).filter(log => log.studentId === stId).reverse();
+                if (myLogs.length === 0) {
+                    logsBody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-slate-500 text-xs">尚無交易歷史紀錄</td></tr>`;
+                } else {
+                    myLogs.forEach(log => {
+                        const tr = document.createElement('tr');
+                        const isBonus = log.type === 'bonus';
+                        let typeTag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">買進</span>`;
+                        if (log.type === 'sell') {
+                            typeTag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">賣出</span>`;
+                        } else if (isBonus) {
+                            typeTag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">獎勵</span>`;
+                        } else if (log.type === 'penalty') {
+                            typeTag = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">扣除</span>`;
+                        }
+
+                        tr.innerHTML = `
+                            <td class="py-2 font-mono text-[11px] text-slate-400">${log.time}</td>
+                            <td class="py-2">${typeTag}</td>
+                            <td class="py-2 font-bold text-white">${log.stockName}</td>
+                            <td class="py-2">$${log.price}</td>
+                            <td class="py-2">${log.qty}</td>
+                            <td class="py-2 text-right font-bold text-amber-400">$${log.total.toLocaleString()}</td>
+                        `;
+                        logsBody.appendChild(tr);
+                    });
+                }
+            }
+        };
+
+        window.renderTeacherDashboard = function() {
+            if (!window.currentUser || window.currentUser.role !== 'teacher') return;
+
+            // Render Stock Cards for Teacher
+            const teacherStockContainer = document.getElementById('teacherStockCardsContainer');
+            if (teacherStockContainer) {
+                teacherStockContainer.innerHTML = '';
+                Object.values(window.stocks).forEach(stock => {
+                    const changeClass = stock.change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+                    const changeIcon = stock.change >= 0 ? 'fa-caret-up' : 'fa-caret-down';
+                    const changeSign = stock.change >= 0 ? '+' : '';
+
+                    const card = document.createElement('div');
+                    card.className = "bg-slate-800/80 rounded-2xl p-3.5 border border-slate-700/80 space-y-2";
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <h4 class="text-xs font-bold text-white truncate max-w-[100px]">${stock.name}</h4>
+                            <div class="text-right">
+                                <div class="text-sm font-extrabold text-white">$${stock.price}</div>
+                                <div class="text-[10px] font-bold ${changeClass}">
+                                    <i class="fa-solid ${changeIcon} me-0.5"></i>${changeSign}${stock.change}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="h-16 w-full">
+                            <canvas id="chart_tc_${stock.id}"></canvas>
+                        </div>
+                    `;
+                    teacherStockContainer.appendChild(card);
+                    setTimeout(() => renderStockChart(`chart_tc_${stock.id}`, stock), 0);
+                });
+            }
+
+            // Render Teacher Roster Table
+            const teacherTableBody = document.getElementById('teacherRosterTableBody');
+            if (teacherTableBody) {
+                teacherTableBody.innerHTML = '';
+                const rankedList = getSortedStudentsRanked();
+
+                rankedList.forEach((st, idx) => {
+                    const rank = idx + 1;
+                    let rankBadgeClass = "bg-slate-800 text-slate-400";
+                    if (rank === 1) rankBadgeClass = "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-black";
+                    else if (rank === 2) rankBadgeClass = "bg-slate-300/20 text-slate-200 border border-slate-300/40 font-bold";
+                    else if (rank === 3) rankBadgeClass = "bg-amber-700/20 text-amber-500 border border-amber-700/40 font-bold";
+
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-800/50 transition-colors";
+                    tr.innerHTML = `
+                        <td class="py-3 px-3 font-bold">
+                            <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs ${rankBadgeClass}">${rank}</span>
+                        </td>
+                        <td class="py-3 px-3 font-mono font-bold text-slate-300">${st.id}號</td>
+                        <td class="py-3 px-3 font-bold text-white">${st.name}</td>
+                        <td class="py-3 px-3 text-xs text-indigo-300">${st.company}</td>
+                        <td class="py-3 px-3 font-bold text-emerald-400">$${st.cash.toLocaleString()}</td>
+                        <td class="py-3 px-3 text-slate-300">$${st.stockValue.toLocaleString()}</td>
+                        <td class="py-3 px-3 font-extrabold text-amber-400">$${st.netWorth.toLocaleString()}</td>
+                        <td class="py-3 px-3 text-center">
+                            <div class="inline-flex items-center space-x-1">
+                                <button onclick="teacherAdjustCash('${st.id}', 100)" class="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded text-xs font-bold">+100</button>
+                                <button onclick="teacherAdjustCash('${st.id}', 500)" class="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 rounded text-xs font-bold">+500</button>
+                                <button onclick="teacherAdjustCash('${st.id}', -100)" class="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded text-xs font-bold">-100</button>
+                            </div>
+                        </td>
+                        <td class="py-3 px-3 text-center">
+                            <button onclick="teacherResetPassword('${st.id}')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded text-xs font-medium" title="重置密碼為 123">
+                                <i class="fa-solid fa-key text-[10px] me-1"></i>重置
+                            </button>
+                        </td>
+                    `;
+                    teacherTableBody.appendChild(tr);
+                });
+            }
+        };
+
+        // Modal Handlers
+        window.openTradeModal = function(stockId) {
+            if (!window.isMarketOpen) {
+                window.showToast('目前股市處於休市狀態，無法交易！', 'error');
+                return;
+            }
+            if (!window.currentUser || window.currentUser.role !== 'student') {
+                window.showToast('只有學生身份可以下單買賣股票！', 'error');
+                return;
+            }
+            
+            window.selectedStockForTrade = window.stocks[stockId];
+            window.activeTradeType = 'buy';
+            
+            const modal = document.getElementById('tradeModal');
+            if (!modal) return;
+
+            document.getElementById('tradeModalStockName').textContent = window.selectedStockForTrade.name;
+            document.getElementById('tradeModalStockPrice').textContent = `$${window.selectedStockForTrade.price}`;
+            
+            ensureStudentsData();
+            const st = window.studentsData[window.currentUser.id];
+            document.getElementById('tradeModalUserCash').textContent = `$${st.cash.toLocaleString()}`;
+            document.getElementById('tradeModalUserShares').textContent = `${(st.holdings && st.holdings[stockId]) || 0} 股`;
+            document.getElementById('tradeQuantityInput').value = 1;
+
+            setTradeType('buy');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.closeTradeModal = function() {
+            const modal = document.getElementById('tradeModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        window.setTradeType = function(type) {
+            window.activeTradeType = type;
+            const buyBtn = document.getElementById('tradeTypeBuyBtn');
+            const sellBtn = document.getElementById('tradeTypeSellBtn');
+            const confirmBtn = document.getElementById('confirmTradeBtn');
+
+            if (type === 'buy') {
+                buyBtn.className = "py-2.5 text-xs font-bold rounded-xl bg-indigo-600 text-white transition-colors";
+                sellBtn.className = "py-2.5 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition-colors";
+                confirmBtn.textContent = "確認買進股票";
+                confirmBtn.className = "w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-lg shadow-indigo-600/30";
+            } else {
+                sellBtn.className = "py-2.5 text-xs font-bold rounded-xl bg-rose-600 text-white transition-colors";
+                buyBtn.className = "py-2.5 text-xs font-bold rounded-lg text-slate-400 hover:text-white transition-colors";
+                confirmBtn.textContent = "確認賣出股票";
+                confirmBtn.className = "w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-3.5 rounded-xl transition-all text-sm shadow-lg shadow-rose-600/30";
+            }
+            calculateTradeTotal();
+        };
+
+        window.setTradeQtyShortcut = function(n) {
+            const input = document.getElementById('tradeQuantityInput');
+            if (input) {
+                input.value = Math.max(1, (parseInt(input.value) || 0) + n);
+                calculateTradeTotal();
+            }
+        };
+
+        window.setTradeQtyMax = function() {
+            if (!window.selectedStockForTrade || !window.currentUser) return;
+            ensureStudentsData();
+            const st = window.studentsData[window.currentUser.id];
+            const input = document.getElementById('tradeQuantityInput');
+            
+            if (window.activeTradeType === 'buy') {
+                const maxBuy = Math.floor(st.cash / window.selectedStockForTrade.price);
+                input.value = Math.max(1, maxBuy);
+            } else {
+                const shares = (st.holdings && st.holdings[window.selectedStockForTrade.id]) || 0;
+                input.value = Math.max(1, shares);
+            }
+            calculateTradeTotal();
+        };
+
+        window.calculateTradeTotal = function() {
+            const input = document.getElementById('tradeQuantityInput');
+            const totalDisplay = document.getElementById('tradeTotalCost');
+            if (!input || !totalDisplay || !window.selectedStockForTrade) return;
+
+            const qty = Math.max(1, parseInt(input.value) || 1);
+            const total = qty * window.selectedStockForTrade.price;
+            totalDisplay.textContent = `$${total.toLocaleString()} 班幣`;
+        };
+
+        window.executeTrade = function() {
+            if (!window.selectedStockForTrade || !window.currentUser) return;
+            ensureStudentsData();
+            const st = window.studentsData[window.currentUser.id];
+            const qtyInput = document.getElementById('tradeQuantityInput');
+            const qty = parseInt(qtyInput.value) || 1;
+            const total = qty * window.selectedStockForTrade.price;
+
+            if (window.activeTradeType === 'buy') {
+                if (st.cash < total) {
+                    window.showToast('可用現金班幣不足，無法完成交易！', 'error');
+                    return;
+                }
+                st.cash -= total;
+                if (!st.holdings) st.holdings = {};
+                st.holdings[window.selectedStockForTrade.id] = (st.holdings[window.selectedStockForTrade.id] || 0) + qty;
+                window.showToast(`成功買進 ${qty} 股 ${window.selectedStockForTrade.name}`, 'success');
+            } else {
+                const currentShares = (st.holdings && st.holdings[window.selectedStockForTrade.id]) || 0;
+                if (currentShares < qty) {
+                    window.showToast('持有的股票數量不足，無法賣出！', 'error');
+                    return;
+                }
+                st.cash += total;
+                st.holdings[window.selectedStockForTrade.id] -= qty;
+                window.showToast(`成功賣出 ${qty} 股 ${window.selectedStockForTrade.name}`, 'success');
+            }
+
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+            if (!window.tradeLogs) window.tradeLogs = [];
+            window.tradeLogs.push({
+                studentId: st.id,
+                studentName: st.name,
+                stockName: window.selectedStockForTrade.name,
+                type: window.activeTradeType,
+                price: window.selectedStockForTrade.price,
+                qty: qty,
+                total: total,
+                time: timeStr
+            });
+
+            saveStateToCloudAndLocal();
+            closeTradeModal();
+        };
+
+        window.openNewsEventModal = function() {
+            const modal = document.getElementById('newsEventModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        };
+
+        window.closeNewsEventModal = function() {
+            const modal = document.getElementById('newsEventModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        window.publishNewsEvent = function() {
+            const text = document.getElementById('newsTextInput').value.trim();
+            const target = document.getElementById('newsTargetCompany').value;
+            const impactAmount = parseInt(document.getElementById('newsImpactAmount').value) || 0;
+
+            if (!text) {
+                window.showToast('請輸入快訊內容！', 'error');
+                return;
+            }
+
+            window.newsHeadline = text;
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+            const dateStr = `${now.getMonth() + 1}/${now.getDate()}`;
+
+            let targetName = "全市場所有公司";
+            if (target !== 'all' && window.stocks[target]) {
+                targetName = window.stocks[target].name;
+            }
+
+            if (!window.newsHistory) window.newsHistory = [];
+            window.newsHistory.unshift({
+                id: Date.now(),
+                title: text,
+                targetName: targetName,
+                impactAmount: impactAmount,
+                time: timeStr,
+                date: dateStr
+            });
+
+            // Apply price changes
+            Object.values(window.stocks).forEach(s => {
+                if (target === 'all' || s.id === target) {
+                    const oldPrice = s.price;
+                    s.price = Math.max(10, oldPrice + impactAmount);
+                    s.change = s.price - oldPrice;
+                    if (!s.history) s.history = [100];
+                    s.history.push(s.price);
+                }
+            });
+
+            saveStateToCloudAndLocal();
+            closeNewsEventModal();
+            window.showToast('重大快訊已發布並套用股價影響！', 'success');
+        };
+
+        window.openNewsHistoryModal = function() {
+            const modal = document.getElementById('newsHistoryModal');
+            if (!modal) return;
+
+            const list = document.getElementById('newsHistoryList');
+            if (list) {
+                list.innerHTML = '';
+                if (!window.newsHistory || window.newsHistory.length === 0) {
+                    list.innerHTML = `<p class="text-center text-slate-500 text-xs py-6">暫無重大快訊紀錄</p>`;
+                } else {
+                    window.newsHistory.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = "p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/80 space-y-1.5 text-xs";
+                        const impactColor = item.impactAmount >= 0 ? 'text-emerald-400' : 'text-rose-400';
+                        const impactTxt = item.impactAmount >= 0 ? `+${item.impactAmount} 元` : `${item.impactAmount} 元`;
+
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between text-[11px] text-slate-400">
+                                <span><i class="fa-solid fa-clock me-1"></i>${item.date} ${item.time}</span>
+                                <span class="font-bold ${impactColor}">影響金額: ${impactTxt}</span>
+                            </div>
+                            <p class="font-bold text-white text-sm">${item.title}</p>
+                            <span class="inline-block px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-semibold text-[10px]">
+                                目標: ${item.targetName}
+                            </span>
+                        `;
+                        list.appendChild(div);
+                    });
+                }
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        };
+
+        window.closeNewsHistoryModal = function() {
+            const modal = document.getElementById('newsHistoryModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        window.openResetConfirmModal = function() {
+            const modal = document.getElementById('resetConfirmModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        };
+
+        window.closeResetConfirmModal = function() {
+            const modal = document.getElementById('resetConfirmModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        window.executeSystemReset = function() {
+            seedFreshState();
+            closeResetConfirmModal();
+            window.showToast('全系統資產與股市數據已順利重置！', 'info');
+        };
+
+        function populateStudentSelect() {
+            const select = document.getElementById('studentRosterSelect');
+            if (!select) return;
+            select.innerHTML = '';
+            STUDENT_ROSTER.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = `${s.id}號 ${s.name} (${s.company})`;
+                select.appendChild(opt);
+            });
+        }
+
+        // 強制立即初始化基礎數據，防止任何時間差問題
+        ensureStudentsData();
+        populateStudentSelect();
+        initFirebaseSync();
+    </script>
+</body>
+</html>
